@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Matomo Growth Command Center</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f4f7fb;color:#172033}
+.top{background:linear-gradient(135deg,#172554,#312e81);color:#fff;padding:24px 30px;display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;font-size:25px}.sub{opacity:.75;margin-top:5px;font-size:13px}
+.controls{display:flex;gap:10px;flex-wrap:wrap}.controls select,.controls button{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;padding:10px 13px;border-radius:10px}
+.controls option{color:#111}
+.wrap{padding:22px 28px;max-width:1500px;margin:auto}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+.card{background:#fff;border:1px solid #e7ebf2;border-radius:16px;padding:18px;box-shadow:0 5px 18px rgba(28,40,70,.05)}
+.metric{font-size:27px;font-weight:750;margin-top:7px}.label{font-size:12px;color:#718096;text-transform:uppercase;letter-spacing:.7px}.delta{font-size:12px;margin-top:7px;color:#17834d}
+.main{display:grid;grid-template-columns:2fr 1fr;gap:15px;margin-top:15px}
+.title{font-size:15px;font-weight:700;margin-bottom:15px}
+.chartbox{height:290px}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px}
+.channels{display:flex;gap:10px;flex-wrap:wrap}.channel{padding:12px 14px;border-radius:12px;background:#f5f7fb;min-width:115px}.channel b{display:block;margin-top:5px}
+.progress{height:8px;background:#edf1f7;border-radius:10px;overflow:hidden;margin:9px 0}.bar{height:100%;background:#4f46e5;border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:11px 8px;border-bottom:1px solid #edf0f5}th{color:#718096;font-size:11px;text-transform:uppercase}
+.badge{padding:5px 9px;border-radius:99px;background:#e9f8ef;color:#17834d;font-size:11px}
+.insight{background:linear-gradient(135deg,#eef2ff,#f8fafc);border:1px solid #dfe5ff}.insight strong{display:block;font-size:18px;margin:7px 0}.insight p{font-size:13px;color:#5d6677;line-height:1.55}
+.footer{text-align:center;color:#8791a2;font-size:11px;padding:18px}
+@media(max-width:900px){.grid,.main,.split{grid-template-columns:1fr 1fr}.main{grid-template-columns:1fr}}
+@media(max-width:600px){.grid,.main,.split{grid-template-columns:1fr}.top{display:block}.controls{margin-top:15px}}
+</style>
+</head>
+<body>
+<header class="top">
+<div><h1>Matomo Growth Command Center</h1><div class="sub">Acquisition • Behaviour • Leads — everything in one dashboard</div></div>
+<div class="controls">
+<select id="site"><option>All Websites</option><option>Altametrics</option><option>Plum POS</option><option>Restaurant Association</option></select>
+<select id="range"><option>Today</option><option>Yesterday</option><option selected>Last 7 Days</option><option>Last 30 Days</option><option>Custom Range</option></select>
+</div>
+</header>
+
+<main class="wrap">
+<section class="grid">
+<div class="card"><div class="label">Visits</div><div class="metric" id="visits">18,642</div><div class="delta">↑ 12.4% vs previous period</div></div>
+<div class="card"><div class="label">Unique Visitors</div><div class="metric" id="unique">13,908</div><div class="delta">↑ 8.7% vs previous period</div></div>
+<div class="card"><div class="label">Goal Conversions</div><div class="metric" id="goals">486</div><div class="delta">↑ 16.2% vs previous period</div></div>
+<div class="card"><div class="label">Conversion Rate</div><div class="metric" id="rate">2.61%</div><div class="delta">↑ 0.34 pts vs previous period</div></div>
+</section>
+
+<section class="main">
+<div class="card"><div class="title">Performance Trend</div><div class="chartbox"><canvas id="trend"></canvas></div></div>
+<div class="card insight"><div class="label">Executive Insight</div><strong>Leads are growing faster than traffic.</strong><p>Goal conversions are up 16.2%, ahead of visit growth. This suggests stronger visitor intent and improving conversion efficiency.</p><div class="label">Focus area</div><strong>Scale high-converting channels</strong></div>
+</section>
+
+<section class="split">
+<div class="card"><div class="title">Acquisition — All Channels</div>
+<div class="channels">
+<div class="channel">Organic Search<b>7,842</b></div><div class="channel">Direct<b>4,931</b></div><div class="channel">Referral<b>2,866</b></div><div class="channel">Social<b>1,804</b></div><div class="channel">Paid<b>1,199</b></div>
+</div>
+<div style="margin-top:16px">Organic Search<div class="progress"><div class="bar" style="width:72%"></div></div>42.1%</div>
+<div>Direct<div class="progress"><div class="bar" style="width:51%"></div></div>26.5%</div>
+<div>Referral<div class="progress"><div class="bar" style="width:31%"></div></div>15.4%</div>
+</div>
+
+<div class="card"><div class="title">Leads — Goal Overview</div>
+<table><tr><th>Goal</th><th>Conversions</th><th>Rate</th></tr>
+<tr><td>Demo / Contact</td><td>218</td><td><span class="badge">3.1%</span></td></tr>
+<tr><td>Sign Up</td><td>147</td><td><span class="badge">2.4%</span></td></tr>
+<tr><td>Download</td><td>121</td><td><span class="badge">1.9%</span></td></tr></table></div>
+</section>
+
+<section class="card" style="margin-top:15px">
+<div class="title">Behaviour — Top Pages</div>
+<table><tr><th>Page</th><th>Pageviews</th><th>Unique Pageviews</th><th>Avg. Time</th><th>Share</th></tr>
+<tr><td>/</td><td>8,421</td><td>6,981</td><td>01:42</td><td>18.6%</td></tr>
+<tr><td>/pricing/</td><td>4,982</td><td>4,120</td><td>02:18</td><td>11.0%</td></tr>
+<tr><td>/mobile-pos/</td><td>3,746</td><td>3,091</td><td>02:51</td><td>8.3%</td></tr>
+<tr><td>/hardware/pos-terminal/</td><td>2,961</td><td>2,504</td><td>02:07</td><td>6.5%</td></tr>
+<tr><td>/marketplace/</td><td>2,438</td><td>2,011</td><td>01:54</td><td>5.4%</td></tr>
+</table></section>
+<div class="footer">Matomo Growth Command Center • Prototype data — replace with live Matomo API data</div>
+</main>
+<script>
+const ctx=document.getElementById('trend');
+new Chart(ctx,{type:'line',data:{labels:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],datasets:[
+{label:'Visits',data:[2210,2480,2690,2510,3040,2980,2732],tension:.35},
+{label:'Goal Conversions',data:[48,55,62,58,71,74,68],tension:.35,yAxisID:'y1'}
+]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+scales:{y:{beginAtZero:true},y1:{beginAtZero:true,position:'right',grid:{drawOnChartArea:false}}}}});
+</script>
+</body></html>
