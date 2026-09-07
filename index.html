@@ -586,14 +586,17 @@ async function matomoRequest(method,siteId,extra={}){
     });
 
 
-    const url =
-    MATOMO_URL +
-    "?" +
-    params.toString();
-
-
+    // Send Matomo authentication as POST data.
+    // This matches the working Postman request and avoids
+    // putting the token in the URL query string.
     const response =
-    await fetch(url);
+    await fetch(MATOMO_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: params.toString()
+    });
 
 
     if(!response.ok){
