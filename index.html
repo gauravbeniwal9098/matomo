@@ -627,6 +627,52 @@ async function matomoRequest(method,siteId,extra={}){
 }
 
 
+
+/* =========================================
+   MATOMO RESPONSE NORMALIZER
+   Matomo returns a single metric object for
+   one day, but a date-keyed/nested object for
+   ranges such as last7/last30.
+========================================= */
+function flattenMatomoRows(data, parentDate = null){
+    const rows = [];
+
+    if(Array.isArray(data)){
+        data.forEach(item => {
+            rows.push(...flattenMatomoRows(item, parentDate));
+        });
+        return rows;
+    }
+
+    if(data && typeof data === "object"){
+        const hasMetrics =
+            Object.prototype.hasOwnProperty.call(data,"nb_visits") ||
+            Object.prototype.hasOwnProperty.call(data,"nb_uniq_visitors") ||
+            Object.prototype.hasOwnProperty.call(data,"nb_conversions") ||
+            Object.prototype.hasOwnProperty.call(data,"nb_hits") ||
+            Object.prototype.hasOwnProperty.call(data,"label");
+
+        if(hasMetrics){
+            rows.push({
+                ...data,
+                date: data.date || parentDate
+            });
+            return rows;
+        }
+
+        Object.entries(data).forEach(([key,value]) => {
+            const date =
+                /^\d{4}-\d{2}-\d{2}$/.test(key)
+                ? key
+                : parentDate;
+
+            rows.push(...flattenMatomoRows(value, date));
+        });
+    }
+
+    return rows;
+}
+
 /* =========================================
    NUMBER FORMAT
 ========================================= */
@@ -645,34 +691,20 @@ function number(value){
 
 async function loadSummary(siteId,range){
 
-    const dateInfo =
-    getDateRange(range);
+    const dateInfo = getDateRange(range);
 
-
-    let sites = [];
-
-    if(siteId === "all"){
-
-        sites = ["2","17","35"];
-
-    }else{
-
-        sites = [siteId];
-
-    }
-
+    const sites =
+        siteId === "all"
+        ? ["2","17","35"]
+        : [siteId];
 
     let visits = 0;
-
     let unique = 0;
-
     let goals = 0;
-
 
     for(const site of sites){
 
-        const data =
-        await matomoRequest(
+        const data = await matomoRequest(
             "VisitsSummary.get",
             site,
             {
@@ -681,34 +713,13 @@ async function loadSummary(siteId,range){
             }
         );
 
-
-        if(Array.isArray(data)){
-
-            data.forEach(row => {
-
-                visits +=
-                Number(row.nb_visits || 0);
-
-                unique +=
-                Number(row.nb_uniq_visitors || 0);
-
-            });
-
-        }else{
-
-            visits +=
-            Number(data.nb_visits || 0);
-
-            unique +=
-            Number(data.nb_uniq_visitors || 0);
-
-        }
-
+        flattenMatomoRows(data).forEach(row => {
+            visits += Number(row.nb_visits || 0);
+            unique += Number(row.nb_uniq_visitors || 0);
+        });
 
         try{
-
-            const goalData =
-            await matomoRequest(
+            const goalData = await matomoRequest(
                 "Goals.get",
                 site,
                 {
@@ -717,94 +728,44 @@ async function loadSummary(siteId,range){
                 }
             );
 
-
-            if(Array.isArray(goalData)){
-
-                goalData.forEach(row => {
-
-                    goals +=
-                    Number(row.nb_conversions || 0);
-
-                });
-
-            }else{
-
-                goals +=
-                Number(goalData.nb_conversions || 0);
-
-            }
+            flattenMatomoRows(goalData).forEach(row => {
+                goals += Number(row.nb_conversions || 0);
+            });
 
         }catch(e){
-
-            console.log(
-                "Goals API unavailable",
-                e
-            );
-
+            console.log("Goals API unavailable",e);
         }
-
     }
-
 
     const rate =
-    visits > 0
-    ? ((goals / visits) * 100)
-    : 0;
+        visits > 0
+        ? ((goals / visits) * 100)
+        : 0;
 
-
-    document.getElementById("visits")
-    .textContent = number(visits);
-
-
-    document.getElementById("unique")
-    .textContent = number(unique);
-
-
-    document.getElementById("goals")
-    .textContent = number(goals);
-
-
-    document.getElementById("rate")
-    .textContent =
-    rate.toFixed(2) + "%";
-
-
-    document.getElementById("goalTable")
-    .textContent = number(goals);
-
-
-    document.getElementById("goalRate")
-    .textContent =
-    rate.toFixed(2) + "%";
-
+    document.getElementById("visits").textContent = number(visits);
+    document.getElementById("unique").textContent = number(unique);
+    document.getElementById("goals").textContent = number(goals);
+    document.getElementById("rate").textContent = rate.toFixed(2) + "%";
+    document.getElementById("goalTable").textContent = number(goals);
+    document.getElementById("goalRate").textContent = rate.toFixed(2) + "%";
 
     if(goals > 0){
+        document.getElementById("insightTitle").textContent =
+            "Your website is generating live conversions.";
 
-        document.getElementById("insightTitle")
-        .textContent =
-        "Your website is generating live conversions.";
-
-        document.getElementById("insightText")
-        .textContent =
-        number(goals) +
-        " goal conversions were recorded from " +
-        number(visits) +
-        " visits.";
-
+        document.getElementById("insightText").textContent =
+            number(goals) +
+            " goal conversions were recorded from " +
+            number(visits) +
+            " visits.";
     }else{
+        document.getElementById("insightTitle").textContent =
+            "Traffic is being tracked.";
 
-        document.getElementById("insightTitle")
-        .textContent =
-        "Traffic is being tracked.";
-
-        document.getElementById("insightText")
-        .textContent =
-        "No goal conversions were returned for this period.";
-
+        document.getElementById("insightText").textContent =
+            "No goal conversions were returned for this period.";
     }
-
 }
-
 
 /* =========================================
    LOAD TREND
@@ -812,30 +773,18 @@ async function loadSummary(siteId,range){
 
 async function loadTrend(siteId,range){
 
-    const dateInfo =
-    getDateRange(range);
+    const dateInfo = getDateRange(range);
 
-
-    let sites = [];
-
-    if(siteId === "all"){
-
-        sites = ["2","17","35"];
-
-    }else{
-
-        sites = [siteId];
-
-    }
-
+    const sites =
+        siteId === "all"
+        ? ["2","17","35"]
+        : [siteId];
 
     const daily = {};
 
-
     for(const site of sites){
 
-        const data =
-        await matomoRequest(
+        const data = await matomoRequest(
             "VisitsSummary.get",
             site,
             {
@@ -844,67 +793,33 @@ async function loadTrend(siteId,range){
             }
         );
 
+        flattenMatomoRows(data, /^\d{4}-\d{2}-\d{2}$/.test(dateInfo.date) ? dateInfo.date : null)
+        .forEach(row => {
 
-        if(Array.isArray(data)){
+            const day = row.date || row.label;
+            if(!day) return;
 
-            data.forEach(row => {
+            if(!daily[day]){
+                daily[day] = {visits:0};
+            }
 
-                const day =
-                row.date || row.label;
-
-                if(!day) return;
-
-
-                if(!daily[day]){
-
-                    daily[day] = {
-                        visits:0,
-                        goals:0
-                    };
-
-                }
-
-
-                daily[day].visits +=
-                Number(row.nb_visits || 0);
-
-            });
-
-        }
-
+            daily[day].visits += Number(row.nb_visits || 0);
+        });
     }
 
-
-    const labels =
-    Object.keys(daily).sort();
-
-
-    const visitData =
-    labels.map(
-        day => daily[day].visits
-    );
-
+    const labels = Object.keys(daily).sort();
+    const visitData = labels.map(day => daily[day].visits);
 
     if(trendChart){
-
         trendChart.destroy();
-
     }
 
-
-    const ctx =
-    document.getElementById("trend");
-
-
-    trendChart =
-    new Chart(
-        ctx,
+    trendChart = new Chart(
+        document.getElementById("trend"),
         {
             type:"line",
-
             data:{
                 labels:labels,
-
                 datasets:[
                     {
                         label:"Visits",
@@ -913,16 +828,13 @@ async function loadTrend(siteId,range){
                     }
                 ]
             },
-
             options:{
                 responsive:true,
                 maintainAspectRatio:false,
-
                 interaction:{
                     mode:"index",
                     intersect:false
                 },
-
                 scales:{
                     y:{
                         beginAtZero:true
@@ -931,9 +843,7 @@ async function loadTrend(siteId,range){
             }
         }
     );
-
 }
-
 
 /* =========================================
    LOAD ACQUISITION
@@ -941,22 +851,12 @@ async function loadTrend(siteId,range){
 
 async function loadAcquisition(siteId,range){
 
-    const dateInfo =
-    getDateRange(range);
+    const dateInfo = getDateRange(range);
 
-
-    let sites = [];
-
-    if(siteId === "all"){
-
-        sites = ["2","17","35"];
-
-    }else{
-
-        sites = [siteId];
-
-    }
-
+    const sites =
+        siteId === "all"
+        ? ["2","17","35"]
+        : [siteId];
 
     const totals = {
         organic:0,
@@ -966,13 +866,9 @@ async function loadAcquisition(siteId,range){
         paid:0
     };
 
-
     for(const site of sites){
-
         try{
-
-            const data =
-            await matomoRequest(
+            const data = await matomoRequest(
                 "Referrers.getReferrerType",
                 site,
                 {
@@ -981,92 +877,38 @@ async function loadAcquisition(siteId,range){
                 }
             );
 
-
-            const rows =
-            Array.isArray(data)
-            ? data
-            : Object.values(data || {});
-
-
-            rows.forEach(row => {
+            flattenMatomoRows(data).forEach(row => {
 
                 const label =
-                String(
-                    row.label || ""
-                ).toLowerCase();
-
+                    String(row.label || "").toLowerCase();
 
                 const visits =
-                Number(
-                    row.nb_visits || 0
-                );
+                    Number(row.nb_visits || 0);
 
-
-                if(
-                    label.includes("search") ||
-                    label.includes("organic")
-                ){
-
+                if(label.includes("search") || label.includes("organic")){
                     totals.organic += visits;
-
-                }else if(
-                    label.includes("direct")
-                ){
-
+                }else if(label.includes("direct")){
                     totals.direct += visits;
-
-                }else if(
-                    label.includes("social")
-                ){
-
+                }else if(label.includes("social")){
                     totals.social += visits;
-
-                }else if(
-                    label.includes("referral")
-                ){
-
+                }else if(label.includes("referral")){
                     totals.referral += visits;
-
-                }else if(
-                    label.includes("campaign") ||
-                    label.includes("paid")
-                ){
-
+                }else if(label.includes("campaign") || label.includes("paid")){
                     totals.paid += visits;
-
                 }
-
             });
 
         }catch(e){
-
-            console.log(
-                "Acquisition API error",
-                e
-            );
-
+            console.log("Acquisition API error",e);
         }
-
     }
 
-
-    document.getElementById("organic")
-    .textContent = number(totals.organic);
-
-    document.getElementById("direct")
-    .textContent = number(totals.direct);
-
-    document.getElementById("referral")
-    .textContent = number(totals.referral);
-
-    document.getElementById("social")
-    .textContent = number(totals.social);
-
-    document.getElementById("paid")
-    .textContent = number(totals.paid);
-
+    document.getElementById("organic").textContent = number(totals.organic);
+    document.getElementById("direct").textContent = number(totals.direct);
+    document.getElementById("referral").textContent = number(totals.referral);
+    document.getElementById("social").textContent = number(totals.social);
+    document.getElementById("paid").textContent = number(totals.paid);
 }
-
 
 /* =========================================
    LOAD TOP PAGES
@@ -1074,32 +916,18 @@ async function loadAcquisition(siteId,range){
 
 async function loadPages(siteId,range){
 
-    const dateInfo =
-    getDateRange(range);
+    const dateInfo = getDateRange(range);
 
-
-    let sites = [];
-
-    if(siteId === "all"){
-
-        sites = ["2","17","35"];
-
-    }else{
-
-        sites = [siteId];
-
-    }
-
+    const sites =
+        siteId === "all"
+        ? ["2","17","35"]
+        : [siteId];
 
     const pages = {};
 
-
     for(const site of sites){
-
         try{
-
-            const data =
-            await matomoRequest(
+            const data = await matomoRequest(
                 "Actions.getPageUrls",
                 site,
                 {
@@ -1109,89 +937,49 @@ async function loadPages(siteId,range){
                 }
             );
 
+            flattenMatomoRows(data).forEach(row => {
 
-            const rows =
-            Array.isArray(data)
-            ? data
-            : Object.values(data || {});
-
-
-            rows.forEach(row => {
-
-                const page =
-                row.label || "/";
-
+                const page = row.label || "/";
 
                 if(!pages[page]){
-
                     pages[page] = 0;
-
                 }
 
-
-                pages[page] +=
-                Number(
-                    row.nb_hits || 0
-                );
-
+                pages[page] += Number(row.nb_hits || 0);
             });
 
         }catch(e){
-
-            console.log(
-                "Pages API error",
-                e
-            );
-
+            console.log("Pages API error",e);
         }
-
     }
-
 
     const sorted =
-    Object.entries(pages)
-    .sort(
-        (a,b) => b[1] - a[1]
-    )
-    .slice(0,5);
+        Object.entries(pages)
+        .sort((a,b) => b[1] - a[1])
+        .slice(0,5);
 
-
-    const tbody =
-    document.getElementById("pages");
-
-
+    const tbody = document.getElementById("pages");
     tbody.innerHTML = "";
 
-
     if(sorted.length === 0){
-
         tbody.innerHTML =
-        "<tr><td colspan='3'>No page data available.</td></tr>";
-
+            "<tr><td colspan='3'>No page data available.</td></tr>";
         return;
-
     }
 
+    sorted.forEach(([page,pageviews]) => {
 
-    sorted.forEach(
-        ([page, pageviews]) => {
+        const tr = document.createElement("tr");
 
-            const tr =
-            document.createElement("tr");
-
-            tr.innerHTML =
-            `
+        tr.innerHTML = `
             <td>${page}</td>
             <td>${number(pageviews)}</td>
             <td>-</td>
-            `;
+        `;
 
-            tbody.appendChild(tr);
-        }
-    );
-
+        tbody.appendChild(tr);
+    });
 }
-
 
 /* =========================================
    LOAD EVERYTHING
