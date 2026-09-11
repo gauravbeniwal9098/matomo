@@ -52,6 +52,45 @@ border-radius:10px
 color:#111
 }
 
+.custom-dates{
+display:flex;
+align-items:center;
+gap:7px;
+flex-wrap:wrap
+}
+
+.custom-dates input{
+border:1px solid rgba(255,255,255,.25);
+background:rgba(255,255,255,.12);
+color:#fff;
+padding:10px 11px;
+border-radius:10px;
+font-family:inherit
+}
+
+.custom-dates input::-webkit-calendar-picker-indicator{
+filter:invert(1)
+}
+
+.custom-dates span{
+color:rgba(255,255,255,.8);
+font-size:12px
+}
+
+.custom-dates button{
+border:0;
+background:#fff;
+color:#312e81;
+padding:10px 14px;
+border-radius:10px;
+font-weight:700;
+cursor:pointer
+}
+
+.custom-dates button:hover{
+opacity:.9
+}
+
 .wrap{
 padding:22px 28px;
 max-width:1500px;
@@ -263,7 +302,15 @@ Acquisition • Behaviour • Leads — everything in one dashboard
 <option value="yesterday">Yesterday</option>
 <option value="last7" selected>Last 7 Days</option>
 <option value="last30">Last 30 Days</option>
+<option value="custom">Custom Date Range</option>
 </select>
+
+<div id="customDates" class="custom-dates" style="display:none;">
+  <input type="date" id="startDate" aria-label="Start date">
+  <span>to</span>
+  <input type="date" id="endDate" aria-label="End date">
+  <button type="button" id="applyCustom">Apply</button>
+</div>
 
 </div>
 
@@ -491,56 +538,60 @@ function getDateRange(range){
     const today = new Date();
 
     function formatDate(date){
-
         return date.getFullYear() +
         "-" +
         String(date.getMonth()+1).padStart(2,"0") +
         "-" +
         String(date.getDate()).padStart(2,"0");
-
     }
 
     if(range === "today"){
-
         const d = formatDate(today);
-
         return {
             period:"day",
             date:d
         };
-
     }
 
-
     if(range === "yesterday"){
-
         const d = new Date(today);
-
         d.setDate(d.getDate()-1);
 
         return {
             period:"day",
             date:formatDate(d)
         };
-
     }
 
-
     if(range === "last30"){
-
         return {
             period:"day",
             date:"last30"
         };
-
     }
 
+    if(range === "custom"){
+        const startDate = document.getElementById("startDate").value;
+        const endDate = document.getElementById("endDate").value;
+
+        if(!startDate || !endDate){
+            throw new Error("Please select both a start date and an end date.");
+        }
+
+        if(startDate > endDate){
+            throw new Error("Start date cannot be after the end date.");
+        }
+
+        return {
+            period:"day",
+            date:startDate + "," + endDate
+        };
+    }
 
     return {
         period:"day",
         date:"last7"
     };
-
 }
 
 
@@ -1057,12 +1108,55 @@ document
 );
 
 
-document
-.getElementById("range")
-.addEventListener(
-    "change",
-    loadDashboard
-);
+const rangeSelect = document.getElementById("range");
+const customDates = document.getElementById("customDates");
+const startDateInput = document.getElementById("startDate");
+const endDateInput = document.getElementById("endDate");
+const applyCustom = document.getElementById("applyCustom");
+
+function setDefaultCustomDates(){
+
+    const today = new Date();
+
+    const end = new Date(today);
+    const start = new Date(today);
+    start.setDate(start.getDate() - 6);
+
+    function fmt(d){
+        return d.getFullYear() +
+        "-" +
+        String(d.getMonth()+1).padStart(2,"0") +
+        "-" +
+        String(d.getDate()).padStart(2,"0");
+    }
+
+    startDateInput.value = fmt(start);
+    endDateInput.value = fmt(end);
+}
+
+rangeSelect.addEventListener("change", function(){
+
+    if(this.value === "custom"){
+        customDates.style.display = "flex";
+        setDefaultCustomDates();
+        return;
+    }
+
+    customDates.style.display = "none";
+    loadDashboard();
+});
+
+applyCustom.addEventListener("click", function(){
+    loadDashboard();
+});
+
+[startDateInput,endDateInput].forEach(input => {
+    input.addEventListener("change", function(){
+        if(rangeSelect.value === "custom"){
+            // Do not call the API until the user clicks Apply.
+        }
+    });
+});
 
 
 /* =========================================
