@@ -273,11 +273,11 @@ const MATOMO_URL = "https://g2.customerology.com/index.php";
 let MATOMO_TOKEN = localStorage.getItem("my_matomo_token");
 
 if (!MATOMO_TOKEN) {
-    MATOMO_TOKEN = prompt("🔒 Dashboard dekhne ke liye apna Matomo API Token dalein:");
+    MATOMO_TOKEN = prompt("🔒 Please enter your Matomo API Token to view the dashboard:");
     if (MATOMO_TOKEN) {
         localStorage.setItem("my_matomo_token", MATOMO_TOKEN);
     } else {
-        alert("Token nahi dala gaya. Data load nahi hoga. Page refresh karein.");
+        alert("No token provided. Data will not load. Please refresh the page.");
     }
 }
 
