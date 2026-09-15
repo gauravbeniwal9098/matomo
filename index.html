@@ -268,7 +268,18 @@
    MATOMO CONFIGURATION 
 ========================================= */
 const MATOMO_URL = "https://g2.customerology.com/index.php";
-const MATOMO_TOKEN = "26d3f3084958d2eb60d4dbc98bf40b68"; 
+
+// SMART POPUP CODE: Hides token from GitHub and saves it safely in browser
+let MATOMO_TOKEN = localStorage.getItem("my_matomo_token");
+
+if (!MATOMO_TOKEN) {
+    MATOMO_TOKEN = prompt("🔒 Dashboard dekhne ke liye apna Matomo API Token dalein:");
+    if (MATOMO_TOKEN) {
+        localStorage.setItem("my_matomo_token", MATOMO_TOKEN);
+    } else {
+        alert("Token nahi dala gaya. Data load nahi hoga. Page refresh karein.");
+    }
+}
 
 /* =========================================
    GLOBALS & CHART INIT
@@ -283,7 +294,6 @@ Chart.defaults.color = '#64748b';
 Chart.defaults.scale.grid.color = '#f1f5f9';
 
 function initCharts() {
-  // Added 6th color (#8b5cf6) for AI Assistants
   const pieColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
   
   acqChartInstance = new Chart(document.getElementById("acquisitionChart"), {
@@ -356,6 +366,8 @@ function flattenMatomoRows(data, parentDate = null){
    MATOMO API REQUEST (POST BODY)
 ========================================= */
 async function matomoRequest(method,siteId,extra={}){
+    if(!MATOMO_TOKEN) return; // Prevent API calls if token is missing
+    
     const params = new URLSearchParams({
         module: "API",
         method: method,
@@ -379,7 +391,14 @@ async function matomoRequest(method,siteId,extra={}){
 
     if(!response.ok) throw new Error("Matomo API HTTP error: " + response.status);
     const data = await response.json();
-    if(data.result === "error") throw new Error(data.message || "Matomo API error");
+    if(data.result === "error") {
+        if(data.message.includes("authenticate")) {
+            // If token is invalid, clear it so user can enter again
+            localStorage.removeItem("my_matomo_token"); 
+            throw new Error("Invalid Token. Please refresh the page and enter the correct API token.");
+        }
+        throw new Error(data.message || "Matomo API error");
+    }
 
     return data;
 }
@@ -395,13 +414,14 @@ async function loadSummary(siteId,range){
 
     for(const site of sites){
         const data = await matomoRequest("VisitsSummary.get", site, { period:dateInfo.period, date:dateInfo.date });
+        if(!data) return;
         flattenMatomoRows(data).forEach(row => {
             visits += Number(row.nb_visits || 0);
         });
 
         try{
             const goalData = await matomoRequest("Goals.get", site, { period:dateInfo.period, date:dateInfo.date });
-            flattenMatomoRows(goalData).forEach(row => { goals += Number(row.nb_conversions || 0); });
+            if(goalData) flattenMatomoRows(goalData).forEach(row => { goals += Number(row.nb_conversions || 0); });
         }catch(e){ console.log("Goals API unavailable for site", site); }
     }
 
@@ -416,12 +436,12 @@ async function loadAcquisitionCharts(siteId,range){
     const dateInfo = getDateRange(range);
     const sites = siteId === "all" ? ["2","17","35"] : [siteId];
     
-    // Added 'ai' option to totals
     const totals = { organic: {v:0, l:0}, direct: {v:0, l:0}, referral: {v:0, l:0}, social: {v:0, l:0}, paid: {v:0, l:0}, ai: {v:0, l:0} };
 
     for(const site of sites){
         try{
             const data = await matomoRequest("Referrers.getReferrerType", site, { period:dateInfo.period, date:dateInfo.date });
+            if(!data) return;
             flattenMatomoRows(data).forEach(row => {
                 const label = String(row.label || "").toLowerCase();
                 const v = Number(row.nb_visits || 0);
@@ -432,12 +452,11 @@ async function loadAcquisitionCharts(siteId,range){
                 else if(label.includes("website")) { totals.referral.v += v; totals.referral.l += l; }
                 else if(label.includes("social")) { totals.social.v += v; totals.social.l += l; }
                 else if(label.includes("campaign")) { totals.paid.v += v; totals.paid.l += l; }
-                else if(label.includes("ai ") || label.includes("assistant")) { totals.ai.v += v; totals.ai.l += l; } // Added AI Matching
+                else if(label.includes("ai ") || label.includes("assistant")) { totals.ai.v += v; totals.ai.l += l; }
             });
         }catch(e){ console.log("Acquisition API error", e); }
     }
 
-    // Include AI Assistants in labels and datasets
     const labels = ["Organic Search", "Direct Entry", "Websites (Referral)", "Social Networks", "Paid Campaigns", "AI Assistants"];
     const visits = [totals.organic.v, totals.direct.v, totals.referral.v, totals.social.v, totals.paid.v, totals.ai.v];
     const leads = [totals.organic.l, totals.direct.l, totals.referral.l, totals.social.l, totals.paid.l, totals.ai.l];
@@ -461,6 +480,7 @@ async function loadPages(siteId,range){
     for(const site of sites){
         try{
             const data = await matomoRequest("Actions.getPageUrls", site, { period:dateInfo.period, date:dateInfo.date, filter_limit:-1 });
+            if(!data) return;
             flattenMatomoRows(data).forEach(row => {
                 const page = row.label || "/";
                 if(!pages[page]) pages[page] = { hits: 0, visits: 0 };
@@ -518,6 +538,8 @@ function goPage(p) { currentPage = p; renderPages(); }
    MAIN RUNNER & EVENTS
 ========================================= */
 async function loadDashboard(){
+    if(!MATOMO_TOKEN) return; // Stop if no token is provided
+
     const site = document.getElementById("site").value;
     const range = document.getElementById("range").value;
     const errorBox = document.getElementById("errorBox");
@@ -529,7 +551,7 @@ async function loadDashboard(){
         await loadPages(site, range);
     } catch(error){
         console.error(error);
-        errorBox.textContent = "Matomo API Error: " + error.message;
+        errorBox.textContent = "Error: " + error.message;
         errorBox.style.display = "block";
     }
 }
