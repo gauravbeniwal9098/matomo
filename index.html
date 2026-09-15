@@ -268,7 +268,9 @@
    MATOMO CONFIGURATION 
 ========================================= */
 const MATOMO_URL = "https://g2.customerology.com/index.php";
-const MATOMO_TOKEN = "26d3ffgfjnfuydssngg"; 
+
+// YAHAN MERA TOKEN QUOTES "" KE ANDAR HAI, ISKO CHHEDNA NAHI HAI
+const MATOMO_TOKEN = "26d3f3084958d2eb60d4dbc98bf40b68"; 
 
 /* =========================================
    GLOBALS & CHART INIT
@@ -363,7 +365,7 @@ async function matomoRequest(method,siteId,extra={}){
         format: "JSON",
         period: extra.period || "day",
         date: extra.date || "last7",
-        token_auth: 26d3f3084958d2eb60d4dbc98bf40b68
+        token_auth: MATOMO_TOKEN // Fixed here! Directly using variable defined above
     });
 
     Object.keys(extra).forEach(key => {
