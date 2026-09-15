@@ -268,8 +268,6 @@
    MATOMO CONFIGURATION 
 ========================================= */
 const MATOMO_URL = "https://g2.customerology.com/index.php";
-
-// Safe API Token with Quotes
 const MATOMO_TOKEN = "26d3f3084958d2eb60d4dbc98bf40b68"; 
 
 /* =========================================
@@ -285,7 +283,8 @@ Chart.defaults.color = '#64748b';
 Chart.defaults.scale.grid.color = '#f1f5f9';
 
 function initCharts() {
-  const pieColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899'];
+  // Added 6th color (#8b5cf6) for AI Assistants
+  const pieColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
   
   acqChartInstance = new Chart(document.getElementById("acquisitionChart"), {
     type: "doughnut",
@@ -293,7 +292,6 @@ function initCharts() {
     options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: "right", labels: { usePointStyle: true, padding: 15, font: { weight: '600' } } } } }
   });
 
-  // Updated to show only Leads
   goalsChartInstance = new Chart(document.getElementById("goalsChart"), {
     type: "bar",
     data: { labels: [], datasets: [
@@ -418,7 +416,8 @@ async function loadAcquisitionCharts(siteId,range){
     const dateInfo = getDateRange(range);
     const sites = siteId === "all" ? ["2","17","35"] : [siteId];
     
-    const totals = { organic: {v:0, l:0}, direct: {v:0, l:0}, referral: {v:0, l:0}, social: {v:0, l:0}, paid: {v:0, l:0} };
+    // Added 'ai' option to totals
+    const totals = { organic: {v:0, l:0}, direct: {v:0, l:0}, referral: {v:0, l:0}, social: {v:0, l:0}, paid: {v:0, l:0}, ai: {v:0, l:0} };
 
     for(const site of sites){
         try{
@@ -426,22 +425,23 @@ async function loadAcquisitionCharts(siteId,range){
             flattenMatomoRows(data).forEach(row => {
                 const label = String(row.label || "").toLowerCase();
                 const v = Number(row.nb_visits || 0);
-                const l = Number(row.nb_conversions || 0); // Extract Leads
+                const l = Number(row.nb_conversions || 0); 
                 
-                if(label.includes("search") || label.includes("organic")){ totals.organic.v += v; totals.organic.l += l; }
-                else if(label.includes("direct")){ totals.direct.v += v; totals.direct.l += l; }
-                else if(label.includes("social")){ totals.social.v += v; totals.social.l += l; }
-                else if(label.includes("referral")){ totals.referral.v += v; totals.referral.l += l; }
-                else if(label.includes("campaign") || label.includes("paid")){ totals.paid.v += v; totals.paid.l += l; }
+                if(label.includes("search")) { totals.organic.v += v; totals.organic.l += l; }
+                else if(label.includes("direct")) { totals.direct.v += v; totals.direct.l += l; }
+                else if(label.includes("website")) { totals.referral.v += v; totals.referral.l += l; }
+                else if(label.includes("social")) { totals.social.v += v; totals.social.l += l; }
+                else if(label.includes("campaign")) { totals.paid.v += v; totals.paid.l += l; }
+                else if(label.includes("ai ") || label.includes("assistant")) { totals.ai.v += v; totals.ai.l += l; } // Added AI Matching
             });
         }catch(e){ console.log("Acquisition API error", e); }
     }
 
-    const labels = ["Organic Search", "Direct", "Referral", "Social", "Paid Campaigns"];
-    const visits = [totals.organic.v, totals.direct.v, totals.referral.v, totals.social.v, totals.paid.v];
-    const leads = [totals.organic.l, totals.direct.l, totals.referral.l, totals.social.l, totals.paid.l];
+    // Include AI Assistants in labels and datasets
+    const labels = ["Organic Search", "Direct Entry", "Websites (Referral)", "Social Networks", "Paid Campaigns", "AI Assistants"];
+    const visits = [totals.organic.v, totals.direct.v, totals.referral.v, totals.social.v, totals.paid.v, totals.ai.v];
+    const leads = [totals.organic.l, totals.direct.l, totals.referral.l, totals.social.l, totals.paid.l, totals.ai.l];
 
-    // Update KPI 1 (Organic Search Clicks)
     document.getElementById("kpiOrganic").textContent = number(totals.organic.v);
 
     acqChartInstance.data.labels = labels;
@@ -449,7 +449,7 @@ async function loadAcquisitionCharts(siteId,range){
     acqChartInstance.update();
 
     goalsChartInstance.data.labels = labels;
-    goalsChartInstance.data.datasets[0].data = leads; // Now only pushing leads data
+    goalsChartInstance.data.datasets[0].data = leads;
     goalsChartInstance.update();
 }
 
