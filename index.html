@@ -186,13 +186,13 @@
   <!-- KPIs -->
   <div class="kpi-grid">
     <div class="kpi-card">
-      <div class="kpi-title">Total Visits</div>
-      <div class="kpi-value" id="kpiVisits">--</div>
+      <div class="kpi-title">Organic Search Clicks</div>
+      <div class="kpi-value" id="kpiOrganic">--</div>
       <div class="kpi-trend trend-neutral">Live Matomo Data</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-title">Unique Visitors</div>
-      <div class="kpi-value" id="kpiUnique">--</div>
+      <div class="kpi-title">Total Clicks</div>
+      <div class="kpi-value" id="kpiTotalClicks">--</div>
       <div class="kpi-trend trend-neutral">Live Matomo Data</div>
     </div>
     <div class="kpi-card">
@@ -213,7 +213,7 @@
       <div class="section-title">
         <div>
           <h2>Acquisition — All Channels</h2>
-          <span>Visits breakdown by referrer type</span>
+          <span>Clicks breakdown by referrer type</span>
         </div>
       </div>
       <div class="chart-wrap"><canvas id="acquisitionChart"></canvas></div>
@@ -224,7 +224,7 @@
       <div class="section-title">
         <div>
           <h2>Goals & Engagement</h2>
-          <span>Visits vs Actions by Channel</span>
+          <span>Leads by Channel</span>
         </div>
       </div>
       <div class="chart-wrap"><canvas id="goalsChart"></canvas></div>
@@ -269,7 +269,7 @@
 ========================================= */
 const MATOMO_URL = "https://g2.customerology.com/index.php";
 
-// YAHAN MERA TOKEN QUOTES "" KE ANDAR HAI, ISKO CHHEDNA NAHI HAI
+// Safe API Token with Quotes
 const MATOMO_TOKEN = "26d3f3084958d2eb60d4dbc98bf40b68"; 
 
 /* =========================================
@@ -293,11 +293,11 @@ function initCharts() {
     options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: "right", labels: { usePointStyle: true, padding: 15, font: { weight: '600' } } } } }
   });
 
+  // Updated to show only Leads
   goalsChartInstance = new Chart(document.getElementById("goalsChart"), {
     type: "bar",
     data: { labels: [], datasets: [
-        { label: "Visits", data: [], backgroundColor: "#4f46e5", borderRadius: 6, barPercentage: 0.6 },
-        { label: "Actions", data: [], backgroundColor: "#10b981", borderRadius: 6, barPercentage: 0.6 }
+        { label: "Leads", data: [], backgroundColor: "#10b981", borderRadius: 6, barPercentage: 0.6 }
     ]},
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, border: { display: false } }, x: { grid: { display: false }, border: { display: false } } }, plugins: { legend: { position: "top", labels: { usePointStyle: true, padding: 15, font: { weight: '600' } } } } }
   });
@@ -365,7 +365,7 @@ async function matomoRequest(method,siteId,extra={}){
         format: "JSON",
         period: extra.period || "day",
         date: extra.date || "last7",
-        token_auth: MATOMO_TOKEN // Fixed here! Directly using variable defined above
+        token_auth: MATOMO_TOKEN 
     });
 
     Object.keys(extra).forEach(key => {
@@ -393,13 +393,12 @@ async function loadSummary(siteId,range){
     const dateInfo = getDateRange(range);
     const sites = siteId === "all" ? ["2","17","35"] : [siteId];
 
-    let visits = 0, unique = 0, goals = 0;
+    let visits = 0, goals = 0;
 
     for(const site of sites){
         const data = await matomoRequest("VisitsSummary.get", site, { period:dateInfo.period, date:dateInfo.date });
         flattenMatomoRows(data).forEach(row => {
             visits += Number(row.nb_visits || 0);
-            unique += Number(row.nb_uniq_visitors || 0);
         });
 
         try{
@@ -410,8 +409,7 @@ async function loadSummary(siteId,range){
 
     const rate = visits > 0 ? ((goals / visits) * 100) : 0;
 
-    document.getElementById("kpiVisits").textContent = number(visits);
-    document.getElementById("kpiUnique").textContent = number(unique);
+    document.getElementById("kpiTotalClicks").textContent = number(visits);
     document.getElementById("kpiGoals").textContent = number(goals);
     document.getElementById("kpiRate").textContent = rate.toFixed(2) + "%";
 }
@@ -419,7 +417,8 @@ async function loadSummary(siteId,range){
 async function loadAcquisitionCharts(siteId,range){
     const dateInfo = getDateRange(range);
     const sites = siteId === "all" ? ["2","17","35"] : [siteId];
-    const totals = { organic: {v:0, a:0}, direct: {v:0, a:0}, referral: {v:0, a:0}, social: {v:0, a:0}, paid: {v:0, a:0} };
+    
+    const totals = { organic: {v:0, l:0}, direct: {v:0, l:0}, referral: {v:0, l:0}, social: {v:0, l:0}, paid: {v:0, l:0} };
 
     for(const site of sites){
         try{
@@ -427,28 +426,30 @@ async function loadAcquisitionCharts(siteId,range){
             flattenMatomoRows(data).forEach(row => {
                 const label = String(row.label || "").toLowerCase();
                 const v = Number(row.nb_visits || 0);
-                const a = Number(row.nb_actions || 0);
+                const l = Number(row.nb_conversions || 0); // Extract Leads
                 
-                if(label.includes("search") || label.includes("organic")){ totals.organic.v += v; totals.organic.a += a; }
-                else if(label.includes("direct")){ totals.direct.v += v; totals.direct.a += a; }
-                else if(label.includes("social")){ totals.social.v += v; totals.social.a += a; }
-                else if(label.includes("referral")){ totals.referral.v += v; totals.referral.a += a; }
-                else if(label.includes("campaign") || label.includes("paid")){ totals.paid.v += v; totals.paid.a += a; }
+                if(label.includes("search") || label.includes("organic")){ totals.organic.v += v; totals.organic.l += l; }
+                else if(label.includes("direct")){ totals.direct.v += v; totals.direct.l += l; }
+                else if(label.includes("social")){ totals.social.v += v; totals.social.l += l; }
+                else if(label.includes("referral")){ totals.referral.v += v; totals.referral.l += l; }
+                else if(label.includes("campaign") || label.includes("paid")){ totals.paid.v += v; totals.paid.l += l; }
             });
         }catch(e){ console.log("Acquisition API error", e); }
     }
 
     const labels = ["Organic Search", "Direct", "Referral", "Social", "Paid Campaigns"];
     const visits = [totals.organic.v, totals.direct.v, totals.referral.v, totals.social.v, totals.paid.v];
-    const actions = [totals.organic.a, totals.direct.a, totals.referral.a, totals.social.a, totals.paid.a];
+    const leads = [totals.organic.l, totals.direct.l, totals.referral.l, totals.social.l, totals.paid.l];
+
+    // Update KPI 1 (Organic Search Clicks)
+    document.getElementById("kpiOrganic").textContent = number(totals.organic.v);
 
     acqChartInstance.data.labels = labels;
     acqChartInstance.data.datasets[0].data = visits;
     acqChartInstance.update();
 
     goalsChartInstance.data.labels = labels;
-    goalsChartInstance.data.datasets[0].data = visits;
-    goalsChartInstance.data.datasets[1].data = actions;
+    goalsChartInstance.data.datasets[0].data = leads; // Now only pushing leads data
     goalsChartInstance.update();
 }
 
