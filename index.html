@@ -56,7 +56,6 @@
     .custom-dates.active { display: flex; }
     .custom-dates span { color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
 
-    /* Compare Toggle Options */
     .compare-wrapper { display: flex; align-items: center; gap: 8px; color: white; font-size: 14px; font-weight: 600; margin-left: 8px; }
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
@@ -80,8 +79,11 @@
     .kpi-card:nth-child(4)::before { background: #f59e0b; }
     .kpi-title { color: var(--text-muted); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
     .kpi-value { font-size: 32px; font-weight: 800; color: var(--text-main); margin-bottom: 8px; }
+    
     .kpi-trend { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
     .trend-neutral { color: var(--text-muted); }
+    .trend-up { color: var(--success); }
+    .trend-down { color: var(--danger); }
 
     .card { background: var(--card-bg); border-radius: 20px; padding: 28px; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05); border: 1px solid var(--border); margin-bottom: 24px; }
     .section-title { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
@@ -176,7 +178,6 @@
         <input id="compareTo" type="date" style="display:none">
       </div>
 
-      <!-- Action Button -->
       <button class="primary" id="applyBtn">Update Data</button>
     </div>
   </header>
@@ -188,22 +189,22 @@
     <div class="kpi-card">
       <div class="kpi-title">Organic Search Clicks</div>
       <div class="kpi-value" id="kpiOrganic">--</div>
-      <div class="kpi-trend trend-neutral">Live Matomo Data</div>
+      <div class="kpi-trend trend-neutral" id="kpiOrganicTrend">Live Matomo Data</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-title">Total Clicks</div>
       <div class="kpi-value" id="kpiTotalClicks">--</div>
-      <div class="kpi-trend trend-neutral">Live Matomo Data</div>
+      <div class="kpi-trend trend-neutral" id="kpiTotalClicksTrend">Live Matomo Data</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-title">Goal Conversions</div>
       <div class="kpi-value" id="kpiGoals">--</div>
-      <div class="kpi-trend trend-neutral">Live Matomo Data</div>
+      <div class="kpi-trend trend-neutral" id="kpiGoalsTrend">Live Matomo Data</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-title">Conversion Rate</div>
       <div class="kpi-value" id="kpiRate">--%</div>
-      <div class="kpi-trend trend-neutral">Live Matomo Data</div>
+      <div class="kpi-trend trend-neutral" id="kpiRateTrend">Live Matomo Data</div>
     </div>
   </div>
 
@@ -224,7 +225,7 @@
       <div class="section-title">
         <div>
           <h2>Goals & Engagement</h2>
-          <span>Leads by Channel</span>
+          <span>Leads by Channel (Compare mode available)</span>
         </div>
       </div>
       <div class="chart-wrap"><canvas id="goalsChart"></canvas></div>
@@ -269,7 +270,7 @@
 ========================================= */
 const MATOMO_URL = "https://g2.customerology.com/index.php";
 
-// SMART POPUP CODE: Hides token from GitHub and saves it safely in browser
+// SMART POPUP CODE
 let MATOMO_TOKEN = localStorage.getItem("my_matomo_token");
 
 if (!MATOMO_TOKEN) {
@@ -312,140 +313,162 @@ function initCharts() {
 }
 
 /* =========================================
-   DATE & HELPERS
+   NEW DATE & COMPARE LOGIC
 ========================================= */
-function getDateRange(range){
+function formatDate(d) {
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+function resolvePrimaryDates() {
+    const range = document.getElementById("range").value;
     const today = new Date();
-    function formatDate(date){
-        return date.getFullYear() + "-" + String(date.getMonth()+1).padStart(2,"0") + "-" + String(date.getDate()).padStart(2,"0");
-    }
+    let start = new Date(today), end = new Date(today);
 
-    if(range === "today") return { period:"day", date:formatDate(today) };
-    if(range === "yesterday"){
-        const d = new Date(today);
-        d.setDate(d.getDate()-1);
-        return { period:"day", date:formatDate(d) };
+    if(range === "yesterday") { start.setDate(start.getDate()-1); end.setDate(end.getDate()-1); }
+    else if(range === "last7") { start.setDate(start.getDate()-6); }
+    else if(range === "last30") { start.setDate(start.getDate()-29); }
+    else if(range === "custom") {
+        start = new Date(document.getElementById("startDate").value);
+        end = new Date(document.getElementById("endDate").value);
     }
-    if(range === "last30") return { period:"day", date:"last30" };
-    
-    if(range === "custom"){
-        const startDate = document.getElementById("startDate").value;
-        const endDate = document.getElementById("endDate").value;
-        if(!startDate || !endDate) throw new Error("Please select both a start date and an end date.");
-        if(startDate > endDate) throw new Error("Start date cannot be after the end date.");
-        return { period:"day", date:startDate + "," + endDate };
-    }
-    return { period:"day", date:"last7" };
+    return { str: `${formatDate(start)},${formatDate(end)}`, start, end };
 }
 
-function number(value){
-    return Number(value || 0).toLocaleString("en-US");
+function resolveCompareDates(primaryStart, primaryEnd) {
+    const preset = document.getElementById("comparePreset").value;
+    let start = new Date(primaryStart), end = new Date(primaryEnd);
+    const duration = Math.round((primaryEnd - primaryStart) / 86400000) + 1;
+
+    if(preset === "previous_period") {
+        end = new Date(primaryStart);
+        end.setDate(end.getDate() - 1);
+        start = new Date(end);
+        start.setDate(start.getDate() - (duration - 1));
+    } else if(preset === "previous_year") {
+        start.setFullYear(start.getFullYear() - 1);
+        end.setFullYear(end.getFullYear() - 1);
+    } else if(preset === "custom") {
+        start = new Date(document.getElementById("compareFrom").value);
+        end = new Date(document.getElementById("compareTo").value);
+    }
+    return { str: `${formatDate(start)},${formatDate(end)}`, start, end };
 }
 
-function flattenMatomoRows(data, parentDate = null){
+function number(value){ return Number(value || 0).toLocaleString("en-US"); }
+
+function flattenMatomoRows(data){
     const rows = [];
     if(Array.isArray(data)){
-        data.forEach(item => rows.push(...flattenMatomoRows(item, parentDate)));
+        data.forEach(item => rows.push(...flattenMatomoRows(item)));
         return rows;
     }
     if(data && typeof data === "object"){
-        const hasMetrics = data.nb_visits !== undefined || data.nb_uniq_visitors !== undefined || data.nb_conversions !== undefined || data.nb_hits !== undefined || data.label !== undefined;
-        if(hasMetrics){
-            rows.push({ ...data, date: data.date || parentDate });
-            return rows;
-        }
-        Object.entries(data).forEach(([key,value]) => {
-            const date = /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : parentDate;
-            rows.push(...flattenMatomoRows(value, date));
-        });
+        const hasMetrics = data.nb_visits !== undefined || data.nb_conversions !== undefined || data.nb_hits !== undefined;
+        if(hasMetrics){ rows.push(data); return rows; }
+        Object.values(data).forEach(value => rows.push(...flattenMatomoRows(value)));
     }
     return rows;
 }
 
 /* =========================================
+   TREND RENDERING
+========================================= */
+function updateTrend(elementId, current, previous, isRate = false) {
+    const el = document.getElementById(elementId);
+    if(previous === null || previous === undefined) {
+        el.innerHTML = "Live Matomo Data";
+        el.className = "kpi-trend trend-neutral";
+        return;
+    }
+
+    if (previous === 0) {
+        if(current > 0) {
+            el.innerHTML = `↗ +100% <span class="trend-neutral">vs prev</span>`;
+            el.className = "kpi-trend trend-up";
+        } else {
+            el.innerHTML = `→ 0% <span class="trend-neutral">vs prev</span>`;
+            el.className = "kpi-trend trend-neutral";
+        }
+        return;
+    }
+
+    const diff = current - previous;
+    const percent = (diff / previous) * 100;
+    const formatted = Math.abs(percent).toFixed(1) + "%";
+
+    if(diff > 0) {
+        el.innerHTML = `↗ +${formatted} <span class="trend-neutral">vs prev</span>`;
+        el.className = "kpi-trend trend-up";
+    } else if (diff < 0) {
+        el.innerHTML = `↘ -${formatted} <span class="trend-neutral">vs prev</span>`;
+        el.className = "kpi-trend trend-down";
+    } else {
+        el.innerHTML = `→ 0% <span class="trend-neutral">vs prev</span>`;
+        el.className = "kpi-trend trend-neutral";
+    }
+}
+
+/* =========================================
    MATOMO API REQUEST (POST BODY)
 ========================================= */
-async function matomoRequest(method,siteId,extra={}){
-    if(!MATOMO_TOKEN) return; // Prevent API calls if token is missing
+async function matomoRequest(method, siteId, extra={}){
+    if(!MATOMO_TOKEN) return null; 
     
     const params = new URLSearchParams({
         module: "API",
         method: method,
         idSite: siteId,
         format: "JSON",
-        period: extra.period || "day",
-        date: extra.date || "last7",
+        period: "day",
+        date: extra.date,
         token_auth: MATOMO_TOKEN 
     });
 
-    Object.keys(extra).forEach(key => {
-        if(key !== "period" && key !== "date") params.append(key, extra[key]);
-    });
+    if(extra.filter_limit) params.append("filter_limit", extra.filter_limit);
 
-    // POST request pushing auth to Body
     const response = await fetch(MATOMO_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString()
     });
 
-    if(!response.ok) throw new Error("Matomo API HTTP error: " + response.status);
+    if(!response.ok) throw new Error("API HTTP error: " + response.status);
     const data = await response.json();
     if(data.result === "error") {
         if(data.message.includes("authenticate")) {
-            // If token is invalid, clear it so user can enter again
             localStorage.removeItem("my_matomo_token"); 
-            throw new Error("Invalid Token. Please refresh the page and enter the correct API token.");
+            throw new Error("Invalid Token. Refresh page and re-enter API token.");
         }
-        throw new Error(data.message || "Matomo API error");
+        throw new Error(data.message);
     }
-
     return data;
 }
 
 /* =========================================
-   DATA LOADERS
+   DATA FETCHERS
 ========================================= */
-async function loadSummary(siteId,range){
-    const dateInfo = getDateRange(range);
-    const sites = siteId === "all" ? ["2","17","35"] : [siteId];
-
+async function fetchSummaryData(sites, dateStr) {
     let visits = 0, goals = 0;
-
     for(const site of sites){
-        const data = await matomoRequest("VisitsSummary.get", site, { period:dateInfo.period, date:dateInfo.date });
-        if(!data) return;
-        flattenMatomoRows(data).forEach(row => {
-            visits += Number(row.nb_visits || 0);
-        });
+        const vData = await matomoRequest("VisitsSummary.get", site, { date: dateStr });
+        if(vData) flattenMatomoRows(vData).forEach(r => visits += Number(r.nb_visits || 0));
 
-        try{
-            const goalData = await matomoRequest("Goals.get", site, { period:dateInfo.period, date:dateInfo.date });
-            if(goalData) flattenMatomoRows(goalData).forEach(row => { goals += Number(row.nb_conversions || 0); });
-        }catch(e){ console.log("Goals API unavailable for site", site); }
+        try {
+            const gData = await matomoRequest("Goals.get", site, { date: dateStr });
+            if(gData) flattenMatomoRows(gData).forEach(r => goals += Number(r.nb_conversions || 0));
+        } catch(e){}
     }
-
-    const rate = visits > 0 ? ((goals / visits) * 100) : 0;
-
-    document.getElementById("kpiTotalClicks").textContent = number(visits);
-    document.getElementById("kpiGoals").textContent = number(goals);
-    document.getElementById("kpiRate").textContent = rate.toFixed(2) + "%";
+    return { visits, goals, rate: visits > 0 ? (goals / visits) * 100 : 0 };
 }
 
-async function loadAcquisitionCharts(siteId,range){
-    const dateInfo = getDateRange(range);
-    const sites = siteId === "all" ? ["2","17","35"] : [siteId];
-    
+async function fetchAcquisitionData(sites, dateStr) {
     const totals = { organic: {v:0, l:0}, direct: {v:0, l:0}, referral: {v:0, l:0}, social: {v:0, l:0}, paid: {v:0, l:0}, ai: {v:0, l:0} };
-
     for(const site of sites){
         try{
-            const data = await matomoRequest("Referrers.getReferrerType", site, { period:dateInfo.period, date:dateInfo.date });
-            if(!data) return;
-            flattenMatomoRows(data).forEach(row => {
+            const data = await matomoRequest("Referrers.getReferrerType", site, { date: dateStr });
+            if(data) flattenMatomoRows(data).forEach(row => {
                 const label = String(row.label || "").toLowerCase();
-                const v = Number(row.nb_visits || 0);
-                const l = Number(row.nb_conversions || 0); 
+                const v = Number(row.nb_visits || 0), l = Number(row.nb_conversions || 0); 
                 
                 if(label.includes("search")) { totals.organic.v += v; totals.organic.l += l; }
                 else if(label.includes("direct")) { totals.direct.v += v; totals.direct.l += l; }
@@ -454,63 +477,100 @@ async function loadAcquisitionCharts(siteId,range){
                 else if(label.includes("campaign")) { totals.paid.v += v; totals.paid.l += l; }
                 else if(label.includes("ai ") || label.includes("assistant")) { totals.ai.v += v; totals.ai.l += l; }
             });
-        }catch(e){ console.log("Acquisition API error", e); }
+        } catch(e){}
     }
-
-    const labels = ["Organic Search", "Direct Entry", "Websites (Referral)", "Social Networks", "Paid Campaigns", "AI Assistants"];
-    const visits = [totals.organic.v, totals.direct.v, totals.referral.v, totals.social.v, totals.paid.v, totals.ai.v];
-    const leads = [totals.organic.l, totals.direct.l, totals.referral.l, totals.social.l, totals.paid.l, totals.ai.l];
-
-    document.getElementById("kpiOrganic").textContent = number(totals.organic.v);
-
-    acqChartInstance.data.labels = labels;
-    acqChartInstance.data.datasets[0].data = visits;
-    acqChartInstance.update();
-
-    goalsChartInstance.data.labels = labels;
-    goalsChartInstance.data.datasets[0].data = leads;
-    goalsChartInstance.update();
+    return totals;
 }
 
-async function loadPages(siteId,range){
-    const dateInfo = getDateRange(range);
-    const sites = siteId === "all" ? ["2","17","35"] : [siteId];
-    const pages = {};
+/* =========================================
+   MAIN RUNNER
+========================================= */
+async function loadDashboard(){
+    if(!MATOMO_TOKEN) return; 
 
-    for(const site of sites){
-        try{
-            const data = await matomoRequest("Actions.getPageUrls", site, { period:dateInfo.period, date:dateInfo.date, filter_limit:-1 });
-            if(!data) return;
-            flattenMatomoRows(data).forEach(row => {
+    const siteVal = document.getElementById("site").value;
+    const sites = siteVal === "all" ? ["2","17","35"] : [siteVal];
+    const isCompare = document.getElementById("compareToggle").checked;
+    
+    document.getElementById("errorBox").style.display = "none";
+
+    try {
+        // Resolve Exact Dates for API
+        const primaryDates = resolvePrimaryDates();
+        let compareDates = null;
+        if(isCompare) compareDates = resolveCompareDates(primaryDates.start, primaryDates.end);
+
+        // 1. SUMMARY KPIs
+        const primarySum = await fetchSummaryData(sites, primaryDates.str);
+        document.getElementById("kpiTotalClicks").textContent = number(primarySum.visits);
+        document.getElementById("kpiGoals").textContent = number(primarySum.goals);
+        document.getElementById("kpiRate").textContent = primarySum.rate.toFixed(2) + "%";
+
+        if(isCompare) {
+            const compareSum = await fetchSummaryData(sites, compareDates.str);
+            updateTrend("kpiTotalClicksTrend", primarySum.visits, compareSum.visits);
+            updateTrend("kpiGoalsTrend", primarySum.goals, compareSum.goals);
+            updateTrend("kpiRateTrend", primarySum.rate, compareSum.rate, true);
+        } else {
+            updateTrend("kpiTotalClicksTrend", null); updateTrend("kpiGoalsTrend", null); updateTrend("kpiRateTrend", null);
+        }
+
+        // 2. ACQUISITION CHARTS
+        const primaryAcq = await fetchAcquisitionData(sites, primaryDates.str);
+        document.getElementById("kpiOrganic").textContent = number(primaryAcq.organic.v);
+        
+        const labels = ["Organic Search", "Direct Entry", "Websites (Referral)", "Social Networks", "Paid Campaigns", "AI Assistants"];
+        const pVisits = [primaryAcq.organic.v, primaryAcq.direct.v, primaryAcq.referral.v, primaryAcq.social.v, primaryAcq.paid.v, primaryAcq.ai.v];
+        const pLeads = [primaryAcq.organic.l, primaryAcq.direct.l, primaryAcq.referral.l, primaryAcq.social.l, primaryAcq.paid.l, primaryAcq.ai.l];
+
+        acqChartInstance.data.labels = labels;
+        acqChartInstance.data.datasets[0].data = pVisits;
+        acqChartInstance.update();
+
+        // Goals Chart logic (Single vs Compare)
+        goalsChartInstance.data.labels = labels;
+        goalsChartInstance.data.datasets = [{ label: "Leads (Current)", data: pLeads, backgroundColor: "#10b981", borderRadius: 6, barPercentage: 0.6 }];
+
+        if(isCompare) {
+            const compareAcq = await fetchAcquisitionData(sites, compareDates.str);
+            updateTrend("kpiOrganicTrend", primaryAcq.organic.v, compareAcq.organic.v);
+            
+            const cLeads = [compareAcq.organic.l, compareAcq.direct.l, compareAcq.referral.l, compareAcq.social.l, compareAcq.paid.l, compareAcq.ai.l];
+            // Add comparison grey bar to chart
+            goalsChartInstance.data.datasets.push({ label: "Leads (Previous)", data: cLeads, backgroundColor: "#cbd5e1", borderRadius: 6, barPercentage: 0.6 });
+        } else {
+            updateTrend("kpiOrganicTrend", null);
+        }
+        goalsChartInstance.update();
+
+        // 3. TOP PAGES
+        const pages = {};
+        for(const site of sites){
+            const pData = await matomoRequest("Actions.getPageUrls", site, { date: primaryDates.str, filter_limit: -1 });
+            if(pData) flattenMatomoRows(pData).forEach(row => {
                 const page = row.label || "/";
                 if(!pages[page]) pages[page] = { hits: 0, visits: 0 };
                 pages[page].hits += Number(row.nb_hits || 0);
                 pages[page].visits += Number(row.nb_visits || 0);
             });
-        }catch(e){ console.log("Pages API error",e); }
-    }
+        }
+        pagesData = Object.entries(pages).sort((a,b) => b[1].hits - a[1].hits).map(([p, m]) => [p, m.hits, m.visits]);
+        currentPage = 1;
+        renderPages();
 
-    pagesData = Object.entries(pages)
-        .sort((a,b) => b[1].hits - a[1].hits)
-        .map(([page, metrics]) => [page, metrics.hits, metrics.visits]);
-    
-    currentPage = 1;
-    renderPages();
+    } catch(error){
+        console.error(error);
+        const errBox = document.getElementById("errorBox");
+        errBox.textContent = "Error: " + error.message;
+        errBox.style.display = "block";
+    }
 }
 
-/* =========================================
-   PAGINATION
-========================================= */
 function renderPages() {
     const start = (currentPage - 1) * perPage;
     const rows = pagesData.slice(start, start + perPage);
-    
     document.getElementById("pagesBody").innerHTML = rows.length ? rows.map(r =>
-      `<tr>
-        <td><span class="badge">${r[0]}</span></td>
-        <td class="numeric"><b>${number(r[1])}</b></td>
-        <td class="numeric">${number(r[2])}</td>
-      </tr>`
+      `<tr><td><span class="badge">${r[0]}</span></td><td class="numeric"><b>${number(r[1])}</b></td><td class="numeric">${number(r[2])}</td></tr>`
     ).join("") : `<tr><td colspan="3" style="text-align:center;">No page data available for this period.</td></tr>`;
 
     const total = Math.ceil(pagesData.length / perPage);
@@ -519,80 +579,32 @@ function renderPages() {
     if(total > 0) {
       let buttons = `<button onclick="goPage(${Math.max(1, currentPage - 1)})" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>`;
       for(let i = 1; i <= total; i++) {
-        if(i === 1 || i === total || (i >= currentPage - 1 && i <= currentPage + 1)) {
-          buttons += `<button class="${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
-        } else if (i === currentPage - 2 || i === currentPage + 2) {
-          buttons += `<button disabled>...</button>`;
-        }
+        if(i === 1 || i === total || (i >= currentPage - 1 && i <= currentPage + 1)) buttons += `<button class="${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+        else if (i === currentPage - 2 || i === currentPage + 2) buttons += `<button disabled>...</button>`;
       }
       buttons += `<button onclick="goPage(${Math.min(total, currentPage + 1)})" ${currentPage === total ? 'disabled' : ''}>Next</button>`;
       document.getElementById("pagination").innerHTML = buttons.replace(/<button disabled>\.\.\.<\/button><button disabled>\.\.\.<\/button>/g, '<button disabled>...</button>');
-    } else {
-      document.getElementById("pagination").innerHTML = "";
-    }
+    } else document.getElementById("pagination").innerHTML = "";
 }
 function goPage(p) { currentPage = p; renderPages(); }
 
-
-/* =========================================
-   MAIN RUNNER & EVENTS
-========================================= */
-async function loadDashboard(){
-    if(!MATOMO_TOKEN) return; // Stop if no token is provided
-
-    const site = document.getElementById("site").value;
-    const range = document.getElementById("range").value;
-    const errorBox = document.getElementById("errorBox");
-    errorBox.style.display = "none";
-
-    try{
-        await loadSummary(site, range);
-        await loadAcquisitionCharts(site, range);
-        await loadPages(site, range);
-    } catch(error){
-        console.error(error);
-        errorBox.textContent = "Error: " + error.message;
-        errorBox.style.display = "block";
-    }
-}
-
 // UI Event Listeners
-const rangeSelect = document.getElementById("range");
-const customDates = document.getElementById("customDates");
-const compareToggle = document.getElementById("compareToggle");
-const compareSection = document.getElementById("compareSection");
-const comparePreset = document.getElementById("comparePreset");
-
-function setDefaultCustomDates(){
-    const today = new Date();
-    const end = new Date(today);
-    const start = new Date(today);
-    start.setDate(start.getDate() - 6);
-    function fmt(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
-    document.getElementById("startDate").value = fmt(start);
-    document.getElementById("endDate").value = fmt(end);
-}
-
-rangeSelect.addEventListener("change", function(){
+document.getElementById("range").addEventListener("change", function(){
     if(this.value === "custom"){
-        customDates.classList.add("active");
-        setDefaultCustomDates();
+        document.getElementById("customDates").classList.add("active");
+        const today = new Date(), end = new Date(today), start = new Date(today); start.setDate(start.getDate() - 6);
+        document.getElementById("startDate").value = formatDate(start); document.getElementById("endDate").value = formatDate(end);
     } else {
-        customDates.classList.remove("active");
+        document.getElementById("customDates").classList.remove("active");
         loadDashboard();
     }
 });
 
-// Compare Toggle UI Logic
-compareToggle.addEventListener("change", function(){
-    if(this.checked) {
-        compareSection.classList.add("active");
-    } else {
-        compareSection.classList.remove("active");
-    }
+document.getElementById("compareToggle").addEventListener("change", function(){
+    document.getElementById("compareSection").classList.toggle("active", this.checked);
 });
 
-comparePreset.addEventListener("change", function(){
+document.getElementById("comparePreset").addEventListener("change", function(){
     const custom = this.value === "custom";
     document.getElementById("compareFrom").style.display = custom ? "block" : "none";
     document.getElementById("compareTo").style.display = custom ? "block" : "none";
@@ -601,7 +613,6 @@ comparePreset.addEventListener("change", function(){
 document.getElementById("applyBtn").addEventListener("click", loadDashboard);
 document.getElementById("site").addEventListener("change", loadDashboard);
 
-// Boot
 initCharts();
 loadDashboard();
 </script>
