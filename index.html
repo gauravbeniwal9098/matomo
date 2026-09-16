@@ -56,6 +56,7 @@
     .custom-dates.active { display: flex; }
     .custom-dates span { color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
 
+    /* Compare Toggle Options */
     .compare-wrapper { display: flex; align-items: center; gap: 8px; color: white; font-size: 14px; font-weight: 600; margin-left: 8px; }
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
@@ -290,24 +291,37 @@ let pagesData = [];
 const perPage = 5;
 let currentPage = 1;
 
+// Global Colors array
+const pieColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+
 Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
 Chart.defaults.color = '#64748b';
 Chart.defaults.scale.grid.color = '#f1f5f9';
 
 function initCharts() {
-  const pieColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
-  
   acqChartInstance = new Chart(document.getElementById("acquisitionChart"), {
     type: "doughnut",
-    data: { labels: [], datasets: [{ data: [], backgroundColor: pieColors, borderWidth: 0, hoverOffset: 8 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: "right", labels: { usePointStyle: true, padding: 15, font: { weight: '600' } } } } }
+    data: { labels: [], datasets: [] }, // Set dynamically
+    options: { 
+      responsive: true, 
+      maintainAspectRatio: false, 
+      cutout: '60%', // Adjusted cutout to fit double rings perfectly
+      plugins: { 
+        legend: { position: "right", labels: { usePointStyle: true, padding: 15, font: { weight: '600' } } },
+        tooltip: {
+            callbacks: {
+                label: function(context) {
+                    return ' ' + context.dataset.label + ': ' + number(context.raw);
+                }
+            }
+        }
+      } 
+    }
   });
 
   goalsChartInstance = new Chart(document.getElementById("goalsChart"), {
     type: "bar",
-    data: { labels: [], datasets: [
-        { label: "Leads", data: [], backgroundColor: "#10b981", borderRadius: 6, barPercentage: 0.6 }
-    ]},
+    data: { labels: [], datasets: [] }, // Set dynamically
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, border: { display: false } }, x: { grid: { display: false }, border: { display: false } } }, plugins: { legend: { position: "top", labels: { usePointStyle: true, padding: 15, font: { weight: '600' } } } } }
   });
 }
@@ -371,16 +385,37 @@ function flattenMatomoRows(data){
 }
 
 /* =========================================
-   TREND RENDERING
+   TREND RENDERING (Updated for Rates)
 ========================================= */
 function updateTrend(elementId, current, previous, isRate = false) {
     const el = document.getElementById(elementId);
+    
+    // No comparison active
     if(previous === null || previous === undefined) {
         el.innerHTML = "Live Matomo Data";
         el.className = "kpi-trend trend-neutral";
         return;
     }
 
+    // Rate Logic (Absolute difference, e.g., +0.50% vs prev)
+    if(isRate) {
+        const diff = current - previous;
+        const formatted = Math.abs(diff).toFixed(2) + "%";
+        
+        if(diff > 0) {
+            el.innerHTML = `↗ +${formatted} <span class="trend-neutral">vs prev</span>`;
+            el.className = "kpi-trend trend-up";
+        } else if (diff < 0) {
+            el.innerHTML = `↘ -${formatted} <span class="trend-neutral">vs prev</span>`;
+            el.className = "kpi-trend trend-down";
+        } else {
+            el.innerHTML = `→ 0.00% <span class="trend-neutral">vs prev</span>`;
+            el.className = "kpi-trend trend-neutral";
+        }
+        return;
+    }
+
+    // Normal Volume logic (Relative difference, e.g., +12% vs prev)
     if (previous === 0) {
         if(current > 0) {
             el.innerHTML = `↗ +100% <span class="trend-neutral">vs prev</span>`;
@@ -510,7 +545,7 @@ async function loadDashboard(){
             const compareSum = await fetchSummaryData(sites, compareDates.str);
             updateTrend("kpiTotalClicksTrend", primarySum.visits, compareSum.visits);
             updateTrend("kpiGoalsTrend", primarySum.goals, compareSum.goals);
-            updateTrend("kpiRateTrend", primarySum.rate, compareSum.rate, true);
+            updateTrend("kpiRateTrend", primarySum.rate, compareSum.rate, true); // True = Calculates as Rate difference
         } else {
             updateTrend("kpiTotalClicksTrend", null); updateTrend("kpiGoalsTrend", null); updateTrend("kpiRateTrend", null);
         }
@@ -524,23 +559,37 @@ async function loadDashboard(){
         const pLeads = [primaryAcq.organic.l, primaryAcq.direct.l, primaryAcq.referral.l, primaryAcq.social.l, primaryAcq.paid.l, primaryAcq.ai.l];
 
         acqChartInstance.data.labels = labels;
-        acqChartInstance.data.datasets[0].data = pVisits;
-        acqChartInstance.update();
-
-        // Goals Chart logic (Single vs Compare)
         goalsChartInstance.data.labels = labels;
+        
+        // Default Bar chart single dataset
         goalsChartInstance.data.datasets = [{ label: "Leads (Current)", data: pLeads, backgroundColor: "#10b981", borderRadius: 6, barPercentage: 0.6 }];
 
         if(isCompare) {
             const compareAcq = await fetchAcquisitionData(sites, compareDates.str);
             updateTrend("kpiOrganicTrend", primaryAcq.organic.v, compareAcq.organic.v);
             
+            const cVisits = [compareAcq.organic.v, compareAcq.direct.v, compareAcq.referral.v, compareAcq.social.v, compareAcq.paid.v, compareAcq.ai.v];
             const cLeads = [compareAcq.organic.l, compareAcq.direct.l, compareAcq.referral.l, compareAcq.social.l, compareAcq.paid.l, compareAcq.ai.l];
-            // Add comparison grey bar to chart
+            
+            // PIE CHART: DOUBLE RINGS
+            // Outer Ring: Current, Inner Ring: Previous (with 50% opacity hex '80')
+            acqChartInstance.data.datasets = [
+                { label: "Current", data: pVisits, backgroundColor: pieColors, hoverOffset: 4, borderWidth: 2, borderColor: "#fff" },
+                { label: "Previous", data: cVisits, backgroundColor: pieColors.map(c => c + '80'), hoverOffset: 4, borderWidth: 2, borderColor: "#fff" }
+            ];
+
+            // BAR CHART: DOUBLE BARS
             goalsChartInstance.data.datasets.push({ label: "Leads (Previous)", data: cLeads, backgroundColor: "#cbd5e1", borderRadius: 6, barPercentage: 0.6 });
         } else {
             updateTrend("kpiOrganicTrend", null);
+            
+            // PIE CHART: SINGLE RING
+            acqChartInstance.data.datasets = [
+                { label: "Clicks", data: pVisits, backgroundColor: pieColors, hoverOffset: 8, borderWidth: 0 }
+            ];
         }
+
+        acqChartInstance.update();
         goalsChartInstance.update();
 
         // 3. TOP PAGES
