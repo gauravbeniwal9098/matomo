@@ -56,7 +56,6 @@
     .custom-dates.active { display: flex; }
     .custom-dates span { color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
 
-    /* Compare Toggle Options */
     .compare-wrapper { display: flex; align-items: center; gap: 8px; color: white; font-size: 14px; font-weight: 600; margin-left: 8px; }
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
@@ -91,8 +90,16 @@
     .section-title h2 { font-size: 18px; margin: 0; font-weight: 700; color: var(--text-main); }
     .section-title span, .section-title .muted { font-size: 14px; color: var(--text-muted); margin-top: 4px; display: block; }
     
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
     .chart-wrap { height: 320px; position: relative; }
+
+    /* New Audience Stats CSS */
+    .stat-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; font-size: 14px; }
+    .stat-label { font-weight: 600; width: 25%; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-bar-container { flex-grow: 1; height: 8px; background: #f1f5f9; border-radius: 4px; margin: 0 15px; overflow: hidden; }
+    .stat-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease-in-out; }
+    .stat-value { font-weight: 700; width: 35%; text-align: right; color: var(--text-main); }
+    .stat-percent { color: var(--text-muted); font-size: 12px; font-weight: 500; margin-left: 6px; }
 
     .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
     table { width: 100%; border-collapse: collapse; white-space: nowrap; }
@@ -136,7 +143,6 @@
     </div>
     
     <div class="filters-bar">
-      <!-- Site Selector -->
       <select id="site">
         <option value="all">All Websites</option>
         <option value="2">Altametrics</option>
@@ -144,7 +150,6 @@
         <option value="35">Restaurant Association</option>
       </select>
       
-      <!-- Date Range -->
       <select id="range">
         <option value="today">Today</option>
         <option value="yesterday">Yesterday</option>
@@ -159,7 +164,6 @@
         <input type="date" id="endDate" aria-label="End date">
       </div>
 
-      <!-- Compare Option -->
       <div class="compare-wrapper">
         <label class="switch">
           <input type="checkbox" id="compareToggle">
@@ -209,8 +213,8 @@
     </div>
   </div>
 
+  <!-- Row 1: Charts -->
   <div class="grid2">
-    <!-- Acquisition Pie -->
     <section class="card">
       <div class="section-title">
         <div>
@@ -221,7 +225,6 @@
       <div class="chart-wrap"><canvas id="acquisitionChart"></canvas></div>
     </section>
 
-    <!-- Goals Bar -->
     <section class="card">
       <div class="section-title">
         <div>
@@ -233,7 +236,36 @@
     </section>
   </div>
 
-  <!-- Top Pages -->
+  <!-- Row 2: Audience (Countries & Devices) -->
+  <div class="grid2">
+    <!-- Top Countries -->
+    <section class="card">
+      <div class="section-title">
+        <div>
+          <h2>Audience — Top Countries</h2>
+          <span>Visits breakdown by location</span>
+        </div>
+      </div>
+      <div id="countryList" style="margin-top: 10px;">
+        <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading data...</div>
+      </div>
+    </section>
+
+    <!-- Device Type -->
+    <section class="card">
+      <div class="section-title">
+        <div>
+          <h2>Audience — Device Type</h2>
+          <span>Desktop vs Mobile traffic</span>
+        </div>
+      </div>
+      <div id="deviceList" style="margin-top: 10px;">
+        <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading data...</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Row 3: Top Pages -->
   <section class="card">
     <div class="section-title">
       <div>
@@ -291,7 +323,6 @@ let pagesData = [];
 const perPage = 5;
 let currentPage = 1;
 
-// Global Colors array
 const pieColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
 
 Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
@@ -301,33 +332,27 @@ Chart.defaults.scale.grid.color = '#f1f5f9';
 function initCharts() {
   acqChartInstance = new Chart(document.getElementById("acquisitionChart"), {
     type: "doughnut",
-    data: { labels: [], datasets: [] }, // Set dynamically
+    data: { labels: [], datasets: [] }, 
     options: { 
       responsive: true, 
       maintainAspectRatio: false, 
-      cutout: '60%', // Adjusted cutout to fit double rings perfectly
+      cutout: '60%', 
       plugins: { 
         legend: { position: "right", labels: { usePointStyle: true, padding: 15, font: { weight: '600' } } },
-        tooltip: {
-            callbacks: {
-                label: function(context) {
-                    return ' ' + context.dataset.label + ': ' + number(context.raw);
-                }
-            }
-        }
+        tooltip: { callbacks: { label: function(c) { return ' ' + c.dataset.label + ': ' + number(c.raw); } } }
       } 
     }
   });
 
   goalsChartInstance = new Chart(document.getElementById("goalsChart"), {
     type: "bar",
-    data: { labels: [], datasets: [] }, // Set dynamically
+    data: { labels: [], datasets: [] }, 
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, border: { display: false } }, x: { grid: { display: false }, border: { display: false } } }, plugins: { legend: { position: "top", labels: { usePointStyle: true, padding: 15, font: { weight: '600' } } } } }
   });
 }
 
 /* =========================================
-   NEW DATE & COMPARE LOGIC
+   DATE & HELPERS
 ========================================= */
 function formatDate(d) {
     return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
@@ -384,46 +409,26 @@ function flattenMatomoRows(data){
     return rows;
 }
 
-/* =========================================
-   TREND RENDERING (Updated for Rates)
-========================================= */
 function updateTrend(elementId, current, previous, isRate = false) {
     const el = document.getElementById(elementId);
-    
-    // No comparison active
     if(previous === null || previous === undefined) {
         el.innerHTML = "Live Matomo Data";
         el.className = "kpi-trend trend-neutral";
         return;
     }
 
-    // Rate Logic (Absolute difference, e.g., +0.50% vs prev)
     if(isRate) {
         const diff = current - previous;
         const formatted = Math.abs(diff).toFixed(2) + "%";
-        
-        if(diff > 0) {
-            el.innerHTML = `↗ +${formatted} <span class="trend-neutral">vs prev</span>`;
-            el.className = "kpi-trend trend-up";
-        } else if (diff < 0) {
-            el.innerHTML = `↘ -${formatted} <span class="trend-neutral">vs prev</span>`;
-            el.className = "kpi-trend trend-down";
-        } else {
-            el.innerHTML = `→ 0.00% <span class="trend-neutral">vs prev</span>`;
-            el.className = "kpi-trend trend-neutral";
-        }
+        if(diff > 0) { el.innerHTML = `↗ +${formatted} <span class="trend-neutral">vs prev</span>`; el.className = "kpi-trend trend-up"; } 
+        else if (diff < 0) { el.innerHTML = `↘ -${formatted} <span class="trend-neutral">vs prev</span>`; el.className = "kpi-trend trend-down"; } 
+        else { el.innerHTML = `→ 0.00% <span class="trend-neutral">vs prev</span>`; el.className = "kpi-trend trend-neutral"; }
         return;
     }
 
-    // Normal Volume logic (Relative difference, e.g., +12% vs prev)
     if (previous === 0) {
-        if(current > 0) {
-            el.innerHTML = `↗ +100% <span class="trend-neutral">vs prev</span>`;
-            el.className = "kpi-trend trend-up";
-        } else {
-            el.innerHTML = `→ 0% <span class="trend-neutral">vs prev</span>`;
-            el.className = "kpi-trend trend-neutral";
-        }
+        if(current > 0) { el.innerHTML = `↗ +100% <span class="trend-neutral">vs prev</span>`; el.className = "kpi-trend trend-up"; } 
+        else { el.innerHTML = `→ 0% <span class="trend-neutral">vs prev</span>`; el.className = "kpi-trend trend-neutral"; }
         return;
     }
 
@@ -431,20 +436,13 @@ function updateTrend(elementId, current, previous, isRate = false) {
     const percent = (diff / previous) * 100;
     const formatted = Math.abs(percent).toFixed(1) + "%";
 
-    if(diff > 0) {
-        el.innerHTML = `↗ +${formatted} <span class="trend-neutral">vs prev</span>`;
-        el.className = "kpi-trend trend-up";
-    } else if (diff < 0) {
-        el.innerHTML = `↘ -${formatted} <span class="trend-neutral">vs prev</span>`;
-        el.className = "kpi-trend trend-down";
-    } else {
-        el.innerHTML = `→ 0% <span class="trend-neutral">vs prev</span>`;
-        el.className = "kpi-trend trend-neutral";
-    }
+    if(diff > 0) { el.innerHTML = `↗ +${formatted} <span class="trend-neutral">vs prev</span>`; el.className = "kpi-trend trend-up"; } 
+    else if (diff < 0) { el.innerHTML = `↘ -${formatted} <span class="trend-neutral">vs prev</span>`; el.className = "kpi-trend trend-down"; } 
+    else { el.innerHTML = `→ 0% <span class="trend-neutral">vs prev</span>`; el.className = "kpi-trend trend-neutral"; }
 }
 
 /* =========================================
-   MATOMO API REQUEST (POST BODY)
+   MATOMO API REQUEST (POST)
 ========================================= */
 async function matomoRequest(method, siteId, extra={}){
     if(!MATOMO_TOKEN) return null; 
@@ -517,6 +515,50 @@ async function fetchAcquisitionData(sites, dateStr) {
     return totals;
 }
 
+// Function to render progress bar lists (Country / Device)
+function renderAudienceList(containerId, dataMap, totalVisits, colorHex) {
+    const sorted = Object.entries(dataMap).sort((a,b) => b[1] - a[1]).slice(0, 6);
+    const html = sorted.map(([label, visits]) => {
+        const pct = totalVisits > 0 ? ((visits / totalVisits) * 100).toFixed(1) : 0;
+        return `
+        <div class="stat-row">
+            <div class="stat-label">${label}</div>
+            <div class="stat-bar-container">
+                <div class="stat-bar-fill" style="width: ${pct}%; background: ${colorHex}"></div>
+            </div>
+            <div class="stat-value">${number(visits)} <span class="stat-percent">${pct}%</span></div>
+        </div>`;
+    }).join("");
+    document.getElementById(containerId).innerHTML = html || "<div style='text-align:center; padding: 20px;'>No data available</div>";
+}
+
+async function loadAudienceData(sites, dateStr) {
+    let countryMap = {}, deviceMap = {};
+    let totalCountry = 0, totalDevice = 0;
+
+    for(const site of sites){
+        try {
+            const cData = await matomoRequest("UserCountry.getCountry", site, { date: dateStr, filter_limit: 10 });
+            if(cData) flattenMatomoRows(cData).forEach(r => {
+                const label = r.label || "Unknown"; const v = Number(r.nb_visits || 0);
+                if(!countryMap[label]) countryMap[label] = 0;
+                countryMap[label] += v; totalCountry += v;
+            });
+
+            const dData = await matomoRequest("DevicesDetection.getType", site, { date: dateStr, filter_limit: 10 });
+            if(dData) flattenMatomoRows(dData).forEach(r => {
+                const label = r.label || "Unknown"; const v = Number(r.nb_visits || 0);
+                if(!deviceMap[label]) deviceMap[label] = 0;
+                deviceMap[label] += v; totalDevice += v;
+            });
+        } catch(e) { console.log("Audience API error", e); }
+    }
+
+    renderAudienceList("countryList", countryMap, totalCountry, "#4f46e5"); // Indigo Primary
+    renderAudienceList("deviceList", deviceMap, totalDevice, "#f59e0b");   // Orange
+}
+
+
 /* =========================================
    MAIN RUNNER
 ========================================= */
@@ -530,7 +572,6 @@ async function loadDashboard(){
     document.getElementById("errorBox").style.display = "none";
 
     try {
-        // Resolve Exact Dates for API
         const primaryDates = resolvePrimaryDates();
         let compareDates = null;
         if(isCompare) compareDates = resolveCompareDates(primaryDates.start, primaryDates.end);
@@ -545,7 +586,7 @@ async function loadDashboard(){
             const compareSum = await fetchSummaryData(sites, compareDates.str);
             updateTrend("kpiTotalClicksTrend", primarySum.visits, compareSum.visits);
             updateTrend("kpiGoalsTrend", primarySum.goals, compareSum.goals);
-            updateTrend("kpiRateTrend", primarySum.rate, compareSum.rate, true); // True = Calculates as Rate difference
+            updateTrend("kpiRateTrend", primarySum.rate, compareSum.rate, true); 
         } else {
             updateTrend("kpiTotalClicksTrend", null); updateTrend("kpiGoalsTrend", null); updateTrend("kpiRateTrend", null);
         }
@@ -560,8 +601,6 @@ async function loadDashboard(){
 
         acqChartInstance.data.labels = labels;
         goalsChartInstance.data.labels = labels;
-        
-        // Default Bar chart single dataset
         goalsChartInstance.data.datasets = [{ label: "Leads (Current)", data: pLeads, backgroundColor: "#10b981", borderRadius: 6, barPercentage: 0.6 }];
 
         if(isCompare) {
@@ -571,28 +610,22 @@ async function loadDashboard(){
             const cVisits = [compareAcq.organic.v, compareAcq.direct.v, compareAcq.referral.v, compareAcq.social.v, compareAcq.paid.v, compareAcq.ai.v];
             const cLeads = [compareAcq.organic.l, compareAcq.direct.l, compareAcq.referral.l, compareAcq.social.l, compareAcq.paid.l, compareAcq.ai.l];
             
-            // PIE CHART: DOUBLE RINGS
-            // Outer Ring: Current, Inner Ring: Previous (with 50% opacity hex '80')
             acqChartInstance.data.datasets = [
                 { label: "Current", data: pVisits, backgroundColor: pieColors, hoverOffset: 4, borderWidth: 2, borderColor: "#fff" },
                 { label: "Previous", data: cVisits, backgroundColor: pieColors.map(c => c + '80'), hoverOffset: 4, borderWidth: 2, borderColor: "#fff" }
             ];
-
-            // BAR CHART: DOUBLE BARS
             goalsChartInstance.data.datasets.push({ label: "Leads (Previous)", data: cLeads, backgroundColor: "#cbd5e1", borderRadius: 6, barPercentage: 0.6 });
         } else {
             updateTrend("kpiOrganicTrend", null);
-            
-            // PIE CHART: SINGLE RING
-            acqChartInstance.data.datasets = [
-                { label: "Clicks", data: pVisits, backgroundColor: pieColors, hoverOffset: 8, borderWidth: 0 }
-            ];
+            acqChartInstance.data.datasets = [{ label: "Clicks", data: pVisits, backgroundColor: pieColors, hoverOffset: 8, borderWidth: 0 }];
         }
-
         acqChartInstance.update();
         goalsChartInstance.update();
 
-        // 3. TOP PAGES
+        // 3. AUDIENCE DATA (Country & Device)
+        await loadAudienceData(sites, primaryDates.str);
+
+        // 4. TOP PAGES
         const pages = {};
         for(const site of sites){
             const pData = await matomoRequest("Actions.getPageUrls", site, { date: primaryDates.str, filter_limit: -1 });
